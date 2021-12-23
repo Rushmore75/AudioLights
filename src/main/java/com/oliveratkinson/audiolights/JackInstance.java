@@ -5,6 +5,8 @@
  */
 package com.oliveratkinson.audiolights;
 
+import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.logging.Level;
@@ -48,7 +50,7 @@ public class JackInstance {
     }
 
     public ClientPortBundle openClient() {
-                
+
         try {
             EnumSet<JackOptions> clientOptions = EnumSet.of(JackOptions.JackUseExactName);
             // all the status options are failures?
@@ -57,15 +59,20 @@ public class JackInstance {
             // open client
             JackClient client = getJack().openClient("Tim the wizard", clientOptions, clientStatus);
             JackPort port = client.registerPort("Porty McPortster", JackPortType.AUDIO, JackPortFlags.JackPortIsInput);
-            
-            ProcessCallback callback = new ProcessCallback();
-            client.setProcessCallback(callback);
-            
-            client.activate();  
-                        
+
+            client.setProcessCallback((jClient, nframes) -> {
+                ByteBuffer buffer = port.getBuffer();
+                for(int i = 0; i <= nframes; i++) {
+                    
+                    System.out.print(buffer.getInt(i) +" ");
+                }
+                return true;
+            });
+
+            client.activate();
+
             System.out.println("activated");
-            
-                        
+
             return new ClientPortBundle(client, port);
         } catch (JackException ex) {
             Logger.getLogger(JackInstance.class.getName()).log(Level.SEVERE, null, ex);
