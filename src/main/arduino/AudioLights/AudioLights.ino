@@ -1,107 +1,196 @@
-// #include <WiFi.h> //arduino's lib
+// -- libraries -----------------------------------------------
 #include <ESP8266WiFi.h> //esprissif's lib
-#include <ESP8266WebServer.h>
 
+// -- network variables ---------------------------------------
 const char *ssidAP = "AudioLights Config Service";
-const char *passAP = "your mom";
+const char *passAP = ""; // blank means open network
+
+const int port = 8080;
+
+char result[10];
+// char packetBuffer[UDP_TX_PACKET_MAX_SIZE + 1];
+// char SendBuffer[] = "feed me";
 
 // ESP8266WebServer server(80);
-WiFiServer server(80);
+WiFiServer TCP_SERVER(port);
 
-// const char *htmlPage = "<!DOCTYPE html> \
-// <html> \
-// <body> \
-// <center><h1>ESP32 Soft access point</h1></center> \
-// <center><h2>Web Server</h2></center> \
-// <form> \
-// <button name=\"LED0\" button style=\"color:green\" value=\"ON\" type=\"submit\">LED0 ON</button> \
-// <button name=\"LED0\" button style=\"color=red\" value=\"OFF\" type=\"submit\">LED0 OFF</button><br><br> \
-// </form> \
-// </body> \
-// </html>";
-
-void startAccessPoint() // working
+void startAccessPoint() // works
 {
+    // wifi can be persistant between runs, stop all old connections
+    WiFi.disconnect();
+
     Serial.println("Starting wifi access point");
 
-    WiFi.softAP(ssidAP, passAP);
+    // access point and station
+    WiFi.mode(WIFI_AP_STA);
+
+    // -- setup network -----------------------------
     IPAddress local_ip(192, 168, 4, 1);
-    IPAddress gateway(0, 0, 0, 0); // "disabled"
+    IPAddress gateway(192, 198, 4, 1);
     IPAddress subnet(255, 255, 255, 0);
     WiFi.softAPConfig(local_ip, gateway, subnet);
+    WiFi.softAP(ssidAP, passAP);
+
+    delay(69); // give it a sec to get situated (nice)
 
     Serial.print("IP address: ");
     IPAddress IP = WiFi.softAPIP();
     Serial.println(IP);
+    // WiFi.enableAP(true);   // unneeded?
 
-    server.begin();
+    // start server
+    TCP_SERVER.begin();
+    Serial.println("Access point and server started!");
 }
 
 void stopAccessPoint() // untested
 {
     Serial.println("Shutting down access point...");
     WiFi.softAPdisconnect(true); // turnoff access point
+    WiFi.disconnect(true);
 }
 
-void waitForPacket()
+void connectToNewNetwork(char *ssid, char *pass) // untested
 {
-    WiFiClient client = server.available();
-
-    if (client)
+    WiFi.mode(WIFI_STA);   // no ap
+    WiFi.begin(ssid, pass); // connect to new network via passed credencials
+        while (WiFi.status() != WL_CONNECTED)
     {
-        if (client.connected())
-        {
-            Serial.println("Client Connected");
-        }
+        delay(300);
+        Serial.print('.');
+    }
+    Serial.print("\n\n Connected with ip: ");
+    Serial.println(WiFi.localIP());
+}
 
-        while (client.connected())
+void connectionTest() // works
+{
+    unsigned long tNow;
+
+    if (TCP_SERVER.hasClient())
+    {
+        WiFiClient TCP_CLIENT = TCP_SERVER.available();
+        TCP_CLIENT.setNoDelay(true);
+
+        int timeout = 0;
+        while (timeout < 25)
         {
-            const int BUFFER_SIZE = 16;
-            char buffer[BUFFER_SIZE];
-            if (client.available()) {
-                // Serial.println(client.read());
-                
-                int rlen = client.readBytes(buffer, BUFFER_SIZE);
-                for(int i =0; i < rlen; i++){
-                    Serial.print(buffer[i]);
-                }
-                
+
+            if (TCP_CLIENT)
+            {
+                Serial.print("Client status " + TCP_CLIENT.status());
+
+                String msg = TCP_CLIENT.readStringUntil('\r');
+
+                Serial.print("Received packet of size ");
+                Serial.println(sizeof(msg));
+
+                // who dun it
+                Serial.print("From ");
+                Serial.print(TCP_CLIENT.remoteIP());
+                Serial.print(", Port ");
+                Serial.println(TCP_CLIENT.remotePort());
+
+                // contents
+                Serial.print("Contents: ");
+                Serial.println(msg);
+
+                tNow = millis();
+                dtostrf(tNow, 8, 0, result);
+
+                // reply
+                TCP_CLIENT.println(result);
+                TCP_CLIENT.flush();
+            }
+            else
+            {
+                Serial.print('.');
+                delay(20);
+                timeout++;
             }
         }
-        client.stop();
-        Serial.println("Client disconnected");
     }
+    // client.stop();
+    // Serial.println("Client disconnected");
+}
+
+void getWifiCredentials() // needs testing
+{
+    // if(WiFi.getMode() != WIFI_AP || WIFI_AP_STA) {
+    //     // board isn't setup for this
+    //     Serial.println("wrong wifi mode");
+    //     return;
+    // }
+
+    if (TCP_SERVER.hasClient())
+    {
+        WiFiClient TCP_CLIENT = TCP_SERVER.available();
+        TCP_CLIENT.setNoDelay(true);
+
+        Serial.println("Collecting information");
+
+        bool waiting = true;
+        while (waiting)
+        {
+
+            if (TCP_CLIENT)
+            {
+                // but isn't this rly insecure and bad practice to send passwords over unencripted tcp?!?!?!!
+                // yes.
+
+                // -- get name ----------------------------------------
+                TCP_CLIENT.println("send: wifi's >NAME and >PASSWORD.");
+                TCP_CLIENT.flush();
+                String response = TCP_CLIENT.readStringUntil('\r');
+                Serial.println(response);
+
+                // -- parse string using delimiters --------------------
+                int f = response.indexOf('>');        // find first
+                int s = response.indexOf('>', f + 1); // find second
+
+                // if the char before s == ' ' remove it
+                int ss = (response.charAt(s - 1) == ' ') ? s - 1 : s;
+                String name = response.substring(f + 1, ss);
+                String pass = response.substring(s + 1);
+
+                // -- log ssid and pass ------------------------------------
+                char *newSSID = "";
+                char *newPASS = "";
+                Serial.println(name);
+                Serial.println(pass);
+                name.toCharArray(newSSID, name.length());
+                pass.toCharArray(newPASS, pass.length());
+
+                // need better if statement
+                if ((newPASS != "") || (newSSID != ""))
+                {
+                    // might be running when not suppost to
+                    Serial.println("Changing mode...");
+                    stopAccessPoint();
+                    TCP_SERVER.close();
+                    connectToNewNetwork(newSSID, newPASS);
+
+                    waiting = false;
+                }
+            }
+        }
+    }
+    // client.stop();
+    // Serial.println("Client disconnected");
 }
 
 void setup()
 {
-    pinMode(0, INPUT_PULLUP);
     Serial.begin(115200);
     Serial.println("booting...");
     startAccessPoint();
+    getWifiCredentials();
 }
 
 void loop()
 {
-    waitForPacket();
-}
+  
+    // connectionTest();
 
-// void loop()
-// {
-//     // put your main code here, to run repeatedly:
-//     WiFiClient client = server.available();
-//     if (client)
-//     {
-//         String request = client.readStringUntil('\r');
-//         if (request.indexOf("LED0=ON"))
-//         {
-//             Serial.println("hit led 0");
-//         }
-//         if (request.indexOf("LED0=OFF"))
-//         {
-//             Serial.println("tim");
-//         }
-//         client.print(htmlPage);
-//         request = "";
-//     }
-// }
+    // probably udp connection for lights
+}
