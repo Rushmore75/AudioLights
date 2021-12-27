@@ -23,6 +23,7 @@ import javax.sound.sampled.TargetDataLine;
  *
  * @author olive
  */
+@Deprecated
 public class JavaAudio {
         /*
     below this line is extra code I didn't want to throw out - although unused
