@@ -5,30 +5,45 @@
  */
 package com.oliveratkinson.audiolights;
 
+import com.oliveratkinson.audiolights.old.ClientPortBundle;
+import com.oliveratkinson.audiolights.networking.Client;
+import java.io.IOException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import org.jtransforms.fft.FloatFFT_1D;
 
 /**
  *
  * @author oliver
  */
 public class AudioLights {
+
     public static ClientPortBundle bundle = null;
 
     /**
      * @param args the command line arguments
      */
     public static void main(String[] args) {
-        /*
-        need to do testing with this, 1D, 2D, or 3D?
+        try {
+            SoundClient.startAudioClient();
+        } catch (Exception ex) { Logger.getLogger(AudioLights.class.getName()).log(Level.SEVERE, null, ex); }
+        while (true) {            
+            
+        }
+        //        JackInstance jack = JackInstance.getOrCreate();
+        //        bundle = jack.openClient();
+        //        System.out.println(bundle.getClient().getName());
         
-        */
-//        org.jtransforms.fft.FloatFFT_1D fft = new FloatFFT_1D(512);
-                
-        JackInstance jack = JackInstance.getOrCreate();
-        bundle = jack.openClient();
-        
-        System.out.println(bundle.getClient().getName());
-        
-        
-        while (true) {} 
+//         -- send wifi credentials to esp8266 ---------------------------------
+//        try {
+//
+//            Client client = new Client("192.168.4.1", 8080);
+//            
+//            client.callAndResponse();
+//            
+//            
+//        } catch (IOException ex) {
+//            Logger.getLogger(AudioLights.class.getName()).log(Level.SEVERE, null, ex);
+//        }
     }
 }
